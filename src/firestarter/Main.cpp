@@ -141,9 +141,11 @@ void print_help(cxxopts::Options const &parser, std::string const &section) {
 #endif
     << "  ./FIRESTARTER -l 75 -p 20000000\n"
     << "                                starts FIRESTARTER with an interval length\n"
-    << "                                of 2 sec, 1.5s high load and 0.5s idle\n"
+    << "                                of 2 sec, 1.5s high load"
 #ifdef FIRESTARTER_BUILD_CUDA
     << "                                on CPUs and full load on GPUs\n"
+#else
+    << "\n"
 #endif
 #if defined(linux) || defined(__linux__) 
     << "  ./FIRESTARTER --measurement --start-delta=300000 -t 900\n"
