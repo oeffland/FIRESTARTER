@@ -62,10 +62,6 @@ jobs:
       with:
         fetch-depth: '0'
     - name: Install CUDA runtime
-    - uses: actions/checkout@v2
-      with:
-        fetch-depth: '0'
-    - name: Install CUDA runtime
       if: matrix.CUDA != '0'
       run: |
         case ${{ matrix.CUDA }} in
