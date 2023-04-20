@@ -151,11 +151,14 @@ void print_help(cxxopts::Options const &parser, std::string const &section) {
     << "  ./FIRESTARTER --measurement --start-delta=300000 -t 900\n"
     << "                                starts FIRESTARTER measuring all available\n"
     << "                                metrics for 15 minutes disregarding the first\n"
-    << "                                5 minutes and last two seconds (default to `--stop-delta`)\n"
-    << "  ./FIRESTARTER -t 20 --optimize=NSGA2 --optimization-metric sysfs-powercap-rapl,perf-ipc\n"
-    << "                                starts FIRESTARTER optimizing with the sysfs-powercap-rapl\n"
-    << "                                and perf-ipc metric. The duration is 20s long. The default\n"
-    << "                                instruction groups for the current platform will be used.\n"
+    << "                                5 minutes and last two seconds\n"
+    << "                                (default to `--stop-delta`)\n"
+    << "  ./FIRESTARTER -t 20 --optimize=NSGA2\\\\\n"
+    << "      --optimization-metric sysfs-powercap-rapl,perf-ipc\n"
+    << "                                starts FIRESTARTER optimizing with the\n"
+    << "                                sysfs-powercap-rapl and perf-ipc metric. The\n"
+    << "                                duration is 20s long. The default instruction\n"
+    << "                                groups for the current platform will be used.\n"
 #endif
     ;
   // clang-format on
@@ -167,13 +170,13 @@ Config::Config(int argc, const char **argv) {
 
   // clang-format off
   parser.add_options("information")
-    ("h,help", "Display usage information. SECTION can be any of: information | general | specialized-workloads | debug\n| measurement | optimization",
+    ("h,help", "Display usage information. SECTION can be any of\n:\ninformation | general | specialized-workloads\n| debug| measurement | optimization",
       cxxopts::value<std::string>()->implicit_value(""), "SECTION")
     ("v,version", "Display version information")
     ("c,copyright", "Display copyright information")
     ("w,warranty", "Display warranty information")
     ("q,quiet", "Set log level to Warning")
-    ("r,report", "Display additional information (overridden by -q)")
+    ("r,report", "Display additional information\n(overridden by -q)")
     ("debug", "Print debug output")
     ("a,avail", "List available functions");
 
@@ -188,7 +191,7 @@ Config::Config(int argc, const char **argv) {
     ("m,matrixsize", "Size of the matrix to calculate, default: 0 (maximum)",
       cxxopts::value<unsigned>()->default_value("0"))
 #endif
-    ("t,timeout", "Set the timeout (seconds) after which FIRESTARTER\nterminates itself, default: 0 (no timeout)",
+    ("t,timeout", "Set the timeout (seconds) after which\nFIRESTARTER terminates itself, default: 0 (no timeout)",
       cxxopts::value<unsigned>()->default_value("0"), "TIMEOUT")
     ("l,load", "Set the percentage of high CPU load to LOAD\n(%) default: 100, valid values: 0 <= LOAD <=\n100, threads will be idle in the remaining time,\nfrequency of load changes is determined by -p."
 #ifdef FIRESTARTER_BUILD_CUDA
@@ -207,7 +210,7 @@ Config::Config(int argc, const char **argv) {
 
   parser.add_options("specialized-workloads")
     ("list-instruction-groups", "List the available instruction groups for the\npayload of the current platform.")
-    ("run-instruction-groups", "Run the payload with the specified\ninstruction groups. GROUPS format: multiple INST:VAL\npairs comma-seperated.",
+    ("run-instruction-groups", "Run the payload with the specified\ninstruction groups. GROUPS format: multiple\nINST:VAL pairs comma-seperated.",
       cxxopts::value<std::string>()->default_value(""), "GROUPS")
     ("set-line-count", "Set the number of lines for a payload.",
       cxxopts::value<unsigned>());
@@ -215,9 +218,9 @@ Config::Config(int argc, const char **argv) {
 #ifdef FIRESTARTER_DEBUG_FEATURES
   parser.add_options("debug")
     ("allow-unavailable-payload", "")
-    ("dump-registers", "Dump the working registers on the first\nthread. Depending on the payload these are mm, xmm,\nymm or zmm. Only use it without a timeout and\n100 percent load. DELAY between dumps in secs.",
+    ("dump-registers", "Dump the working registers on the first\nthread. Depending on the payload these are mm,\nxmm, ymm or zmm. Only use it without a timeout\nand 100 percent load. DELAY between dumps in\nsecs.",
       cxxopts::value<unsigned>()->implicit_value("10"), "DELAY")
-    ("dump-registers-outpath", "Path for the dump of the output files. If\nPATH is not given, current working directory will\nbe used.",
+    ("dump-registers-outpath", "Path for the dump of the output files. If PATH\nis not given, current working directory will\nbe used.",
       cxxopts::value<std::string>()->default_value(""), "PATH");
 #endif
 
@@ -225,23 +228,23 @@ Config::Config(int argc, const char **argv) {
   parser.add_options("measurement")
     ("list-metrics", "List the available metrics.")
 #ifndef FIRESTARTER_LINK_STATIC
-    ("metric-path", "Add a path to a shared library representing an interface for a metric. This option can be specified multiple times.",
+    ("metric-path", "Add a path to a shared library representing an\ninterface for a metric. This option can be\nspecified multiple times.",
       cxxopts::value<std::vector<std::string>>()->default_value(""))
 #endif
-    ("metric-from-stdin", "Add a metric NAME with values from stdin.\nFormat of input: \"NAME TIME_SINCE_EPOCH VALUE\\n\".\nTIME_SINCE_EPOCH is a int64 in nanoseconds. VALUE is a double. (Do not forget to flush\nlines!)",
+    ("metric-from-stdin", "Add a metric NAME with values from stdin.\nFormat input: \"NAME TIME_SINCE_EPOCH VALUE\\n\".\nTIME_SINCE_EPOCH is a int64 in nanoseconds.\nVALUE is a double. (Do not forget to flush\nlines!)",
       cxxopts::value<std::vector<std::string>>(), "NAME")
     ("measurement", "Start a measurement for the time specified by\n-t | --timeout. (The timeout must be greater\nthan the start and stop deltas.) Cannot be\ncombined with --optimize.")
-    ("measurement-interval", "Interval of measurements in milliseconds, default: 100",
+    ("measurement-interval", "Interval of measurements in milliseconds,\ndefault: 100",
       cxxopts::value<unsigned>()->default_value("100"))
-    ("start-delta", "Cut of first N milliseconds of measurement, default: 5000",
+    ("start-delta", "Cut off first N milliseconds of measurement,\ndefault: 5000",
       cxxopts::value<unsigned>()->default_value("5000"), "N")
-    ("stop-delta", "Cut of last N milliseconds of measurement, default: 2000",
+    ("stop-delta", "Cut off last N milliseconds of measurement,\ndefault: 2000",
       cxxopts::value<unsigned>()->default_value("2000"), "N")
     ("preheat", "Preheat for N seconds, default: 240",
       cxxopts::value<unsigned>()->default_value("240"), "N");
 
   parser.add_options("optimization")
-    ("optimize", "Run the optimization with one of these algorithms: NSGA2.\nCannot be combined with --measurement.",
+    ("optimize", "Run the optimization with one of these algorithms:\nNSGA2 - Cannot be combined with --measurement.",
       cxxopts::value<std::string>())
     ("optimize-outfile", "Dump the output of the optimization into this\nfile, default: $PWD/$HOSTNAME_$DATE.json",
       cxxopts::value<std::string>())
@@ -251,7 +254,7 @@ Config::Config(int argc, const char **argv) {
       cxxopts::value<unsigned>()->default_value("20"))
     ("generations", "Number of generations, default: 20",
       cxxopts::value<unsigned>()->default_value("20"))
-    ("nsga2-cr", "Crossover probability. Must be in range [0,1[\ndefault: 0.6",
+    ("nsga2-cr", "Crossover probability. Must be in range [0,1]\ndefault: 0.6",
       cxxopts::value<double>()->default_value("0.6"))
     ("nsga2-m", "Mutation probability. Must be in range [0,1]\ndefault: 0.4",
       cxxopts::value<double>()->default_value("0.4"));
