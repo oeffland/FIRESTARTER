@@ -56,6 +56,7 @@ struct Config {
   bool dumpRegisters = false;
   std::chrono::seconds dumpRegistersTimeDelta = std::chrono::seconds(0);
   std::string dumpRegistersOutpath = "";
+  bool errorDetection = false;
   // CUDA parameters
   int gpus = 0;
   unsigned gpuMatrixSize = 0;
@@ -170,7 +171,17 @@ Config::Config(int argc, const char **argv) {
 
   // clang-format off
   parser.add_options("information")
-    ("h,help", "Display usage information. SECTION can be any of\n:\ninformation | general | specialized-workloads\n| debug| measurement | optimization",
+    ("h,help", "Display usage information. SECTION can be any of: information | general | specialized-workloads"
+#ifdef FIRESTARTER_DEBUG_FEATURES || defined(linux) || defined(__linux__)
+     "\n"
+#endif
+#ifdef FIRESTARTER_DEBUG_FEATURES
+     " | debug"
+#endif
+#if defined(linux) || defined(__linux__)
+     " | measurement | optimization"
+#endif
+     ,
       cxxopts::value<std::string>()->implicit_value(""), "SECTION")
     ("v,version", "Display version information")
     ("c,copyright", "Display copyright information")
@@ -206,7 +217,7 @@ Config::Config(int argc, const char **argv) {
     ("b,bind", "Select certain CPUs. CPULIST format: \"x,y,z\",\n\"x-y\", \"x-y/step\", and any combination of the\nabove. Cannot be combined with -n | --threads.",
       cxxopts::value<std::string>()->default_value(""), "CPULIST")
 #endif
-    ;
+    ("error-detection", "Enable error detection. This aborts execution when the calculated data is corruped by errors. FIRESTARTER must run with 2 or more threads for this feature. Cannot be used with -l | --load and --optimize.");
 
   parser.add_options("specialized-workloads")
     ("list-instruction-groups", "List the available instruction groups for the\npayload of the current platform.")
@@ -325,7 +336,14 @@ Config::Config(int argc, const char **argv) {
       throw std::invalid_argument("Option -l/--load may not be above 100.");
     }
 
+    errorDetection = options.count("error-detection");
+    if (errorDetection && loadPercent != 100) {
+      throw std::invalid_argument("Option --error-detection may only be used "
+                                  "with -l/--load equal 100.");
+    }
+
 #ifdef FIRESTARTER_DEBUG_FEATURES
+    allowUnavailablePayload = options.count("allow-unavailable-payload");
     dumpRegisters = options.count("dump-registers");
     if (dumpRegisters) {
       dumpRegistersTimeDelta =
@@ -334,8 +352,12 @@ Config::Config(int argc, const char **argv) {
         throw std::invalid_argument("Option --dump-registers may only be used "
                                     "without a timeout and full load.");
       }
+      if (errorDetection) {
+        throw std::invalid_argument(
+            "Options --dump-registers and --error-detection cannot be used "
+            "together.");
+      }
     }
-    allowUnavailablePayload = options.count("allow-unavailable-payload");
 #endif
 
     requestedNumThreads = options["threads"].as<unsigned>();
@@ -396,6 +418,10 @@ Config::Config(int argc, const char **argv) {
     listMetrics = options.count("list-metrics");
 
     if ((optimize = options.count("optimize"))) {
+      if (errorDetection) {
+        throw std::invalid_argument("Options --error-detection and --optimize "
+                                    "cannot be used together.");
+      }
       if (measurement) {
         throw std::invalid_argument(
             "Options --measurement and --optimize cannot be used together.");
@@ -456,13 +482,13 @@ int main(int argc, const char **argv) {
         cfg.requestedNumThreads, cfg.cpuBind, cfg.printFunctionSummary,
         cfg.functionId, cfg.listInstructionGroups, cfg.instructionGroups,
         cfg.lineCount, cfg.allowUnavailablePayload, cfg.dumpRegisters,
-        cfg.dumpRegistersTimeDelta, cfg.dumpRegistersOutpath, cfg.gpus,
-        cfg.gpuMatrixSize, cfg.gpuUseFloat, cfg.gpuUseDouble, cfg.listMetrics,
-        cfg.measurement, cfg.startDelta, cfg.stopDelta, cfg.measurementInterval,
-        cfg.metricPaths, cfg.stdinMetrics, cfg.optimize, cfg.preheat,
-        cfg.optimizationAlgorithm, cfg.optimizationMetrics,
-        cfg.evaluationDuration, cfg.individuals, cfg.optimizeOutfile,
-        cfg.generations, cfg.nsga2_cr, cfg.nsga2_m);
+        cfg.dumpRegistersTimeDelta, cfg.dumpRegistersOutpath,
+        cfg.errorDetection, cfg.gpus, cfg.gpuMatrixSize, cfg.gpuUseFloat,
+        cfg.gpuUseDouble, cfg.listMetrics, cfg.measurement, cfg.startDelta,
+        cfg.stopDelta, cfg.measurementInterval, cfg.metricPaths,
+        cfg.stdinMetrics, cfg.optimize, cfg.preheat, cfg.optimizationAlgorithm,
+        cfg.optimizationMetrics, cfg.evaluationDuration, cfg.individuals,
+        cfg.optimizeOutfile, cfg.generations, cfg.nsga2_cr, cfg.nsga2_m);
 
     firestarter.mainThread();
 

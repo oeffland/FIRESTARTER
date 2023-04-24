@@ -21,7 +21,6 @@
 
 #include <firestarter/Firestarter.hpp>
 #include <firestarter/Logging/Log.hpp>
-#ifndef FIRESTARTER_BUILD_CUDA_ONLY
 #if defined(linux) || defined(__linux__)
 #include <firestarter/Optimizer/Algorithm/NSGA2.hpp>
 #include <firestarter/Optimizer/History.hpp>
@@ -29,7 +28,6 @@
 extern "C" {
 #include <firestarter/Measurement/Metric/IPCEstimate.h>
 }
-#endif
 #endif
 
 #include <csignal>
@@ -50,8 +48,9 @@ Firestarter::Firestarter(
     std::string const &instructionGroups, unsigned lineCount,
     bool allowUnavailablePayload, bool dumpRegisters,
     std::chrono::seconds const &dumpRegistersTimeDelta,
-    std::string const &dumpRegistersOutpath, int gpus, unsigned gpuMatrixSize,
-    bool gpuUseFloat, bool gpuUseDouble, bool listMetrics, bool measurement,
+    std::string const &dumpRegistersOutpath, bool errorDetection, int gpus,
+    unsigned gpuMatrixSize, bool gpuUseFloat, bool gpuUseDouble,
+    bool listMetrics, bool measurement,
     std::chrono::milliseconds const &startDelta,
     std::chrono::milliseconds const &stopDelta,
     std::chrono::milliseconds const &measurementInterval,
@@ -66,7 +65,8 @@ Firestarter::Firestarter(
     : _argc(argc), _argv(argv), _timeout(timeout), _loadPercent(loadPercent),
       _period(period), _dumpRegisters(dumpRegisters),
       _dumpRegistersTimeDelta(dumpRegistersTimeDelta),
-      _dumpRegistersOutpath(dumpRegistersOutpath), _gpus(gpus),
+      _dumpRegistersOutpath(dumpRegistersOutpath),
+      _errorDetection(errorDetection), _gpus(gpus),
       _gpuMatrixSize(gpuMatrixSize), _gpuUseFloat(gpuUseFloat),
       _gpuUseDouble(gpuUseDouble), _startDelta(startDelta),
       _stopDelta(stopDelta), _measurement(measurement), _optimize(optimize),
@@ -82,7 +82,6 @@ Firestarter::Firestarter(
     _period = std::chrono::microseconds::zero();
   }
 
-#ifndef FIRESTARTER_BUILD_CUDA_ONLY
 #if defined(linux) || defined(__linux__)
 #else
   (void)listMetrics;
@@ -99,6 +98,24 @@ Firestarter::Firestarter(
   if (EXIT_SUCCESS != (returnCode = this->environment().evaluateCpuAffinity(
                            requestedNumThreads, cpuBind))) {
     std::exit(returnCode);
+  }
+
+#if defined(__i386__) || defined(_M_IX86) || defined(__x86_64__) ||            \
+    defined(_M_X64)
+  // Error detection uses crc32 instruction added by the SSE4.2 extension to x86
+  if (_errorDetection) {
+    if (!_environment->topology().featuresAsmjit().hasSSE4_2()) {
+      throw std::invalid_argument("Option --error-detection requires the crc32 "
+                                  "instruction added with SSE_4_2.\n");
+    }
+  }
+#endif
+
+  if (_errorDetection && this->environment().requestedNumThreads() < 2) {
+    throw std::invalid_argument(
+        "Option --error-detection must run with 2 or more threads. Number of "
+        "threads is " +
+        std::to_string(this->environment().requestedNumThreads()) + "\n");
   }
 
   this->environment().evaluateFunctions();
@@ -153,7 +170,9 @@ Firestarter::Firestarter(
     // check if selected metrics are initialized
     for (auto const &optimizationMetric : optimizationMetrics) {
       auto nameEqual = [optimizationMetric](auto const &name) {
-        return name.compare(optimizationMetric) == 0;
+        auto invertedName = "-" + name;
+        return name.compare(optimizationMetric) == 0 ||
+               invertedName.compare(optimizationMetric) == 0;
       };
       // metric name is not found
       if (std::find_if(all.begin(), all.end(), nameEqual) == all.end()) {
@@ -280,12 +299,10 @@ Firestarter::Firestarter(
 
   // setup thread with either high or low load configured at the start
   // low loads has to know the length of the period
-  if (EXIT_SUCCESS !=
-      (returnCode = this->initLoadWorkers((_loadPercent == 0), _period.count(),
-                                          _dumpRegisters))) {
+  if (EXIT_SUCCESS != (returnCode = this->initLoadWorkers((_loadPercent == 0),
+                                                          _period.count()))) {
     std::exit(returnCode);
   }
-#endif
 
   // add some signal handler for aborting FIRESTARTER
 #ifndef _WIN32
@@ -301,22 +318,17 @@ Firestarter::~Firestarter() {
   _cuda.reset();
 #endif
 
-#ifndef FIRESTARTER_BUILD_CUDA_ONLY
   delete _environment;
-#endif
 }
 
 void Firestarter::mainThread() {
-#ifndef FIRESTARTER_BUILD_CUDA_ONLY
   this->environment().printThreadSummary();
-#endif
 
 #ifdef FIRESTARTER_BUILD_CUDA
   _cuda = std::make_unique<cuda::Cuda>(&this->loadVar, _gpuUseFloat,
                                        _gpuUseDouble, _gpuMatrixSize, _gpus);
 #endif
 
-#ifndef FIRESTARTER_BUILD_CUDA_ONLY
 #if defined(linux) || defined(__linux__)
   // if measurement is enabled, start it here
   if (_measurement) {
@@ -353,12 +365,12 @@ void Firestarter::mainThread() {
 
     auto payloadItems = this->environment().selectedConfig().payloadItems();
 
+    firestarter::optimizer::History::save(_optimizeOutfile, startTime,
+                                          payloadItems, _argc, _argv);
+
     // print the best 20 according to each metric
     firestarter::optimizer::History::printBest(_optimizationMetrics,
                                                payloadItems);
-
-    firestarter::optimizer::History::save(_optimizeOutfile, startTime,
-                                          payloadItems, _argc, _argv);
 
     // stop all the load threads
     std::raise(SIGTERM);
@@ -390,7 +402,10 @@ void Firestarter::mainThread() {
     }
   }
 #endif
-#endif
+
+  if (_errorDetection) {
+    this->printThreadErrorReport();
+  }
 }
 
 void Firestarter::setLoad(unsigned long long value) {
@@ -423,12 +438,10 @@ void Firestarter::sigtermHandler(int signum) {
   }
   Firestarter::_watchdogTerminateAlert.notify_all();
 
-#ifndef FIRESTARTER_BUILD_CUDA_ONLY
 #if defined(linux) || defined(__linux__)
   // if we have optimization running stop it
   if (Firestarter::_optimizer) {
     Firestarter::_optimizer->kill();
   }
-#endif
 #endif
 }
