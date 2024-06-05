@@ -91,7 +91,7 @@ for o, a in opts:
 
 # read+parse config file
 cfg = ConfigParser()
-cfg.readfp(open(dirname+'config.cfg'))
+cfg.read_file(open(dirname+'config.cfg'))
 
 for each in cfg.sections():
     if each == "VERSION":
