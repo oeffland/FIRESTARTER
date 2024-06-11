@@ -25,7 +25,7 @@ LINUX_CC?=gcc
 #CC=vtcc -vt:cc gcc -vt:inst manual -DVTRACE -DENABLE_VTRACING
 #CC=scorep --user --nocompiler gcc -DENABLE_SCOREP
 
-LINUX_C_FLAGS=-fomit-frame-pointer -Wall -std=gnu99 -I. -DAFFINITY -fPIC
+LINUX_C_FLAGS=-fomit-frame-pointer -Wall -std=gnu99 -I. -DAFFINITY -fPIC -fcommon
 OPT_STD=-O2
 OPT_ASM=-O0
 LINUX_L_FLAGS=-lpthread -lrt -lm
